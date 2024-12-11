@@ -89,7 +89,7 @@ def has_focused_class(tag):
 def extract_info(html, platform, url):
     if html:
         soup = BeautifulSoup(html, 'html.parser')
-    info = {'account': ''}
+    info = {'account': '', 'account_id': ''}
 
     try:
         if platform == 'YouTube':
@@ -151,7 +151,8 @@ def extract_info(html, platform, url):
                     print(f"Extracted Channel Name: {channel_name}")
 
                 # Set info['account'] to the name and ID separated by a space
-                info['account'] = f"{channel_name} {channel_id}"
+                info['account'] = channel_name
+                info['account_id'] = channel_id
                 print(f"Set info['account']: {info['account']}")
 
             except Exception as e:
@@ -182,7 +183,8 @@ def extract_info(html, platform, url):
                 print(f"Extracted Artist Name: {artist_name}")
 
                 # Set info['account'] to be the artist name and ID separated by a space
-                info['account'] = f"{artist_name} {artist_id}"
+                info['account'] = artist_name
+                info['account_id'] = artist_id
                 print(f"Set info['account']: {info['account']}")
 
             except Exception as e:
@@ -230,7 +232,7 @@ def extract_info(html, platform, url):
                 href = a_tag.get_attribute('href')
                 if href:
                     print(f"Found href: {href}")
-                    info['account'] = href
+                    info['account'] = href.replace("https://www.dailymotion.com/", "")
                 else:
                     print("The <a> tag does not have an href attribute.")
 
@@ -242,7 +244,8 @@ def extract_info(html, platform, url):
             # Extract and print the href and text content
             for element in elements:
                 href = element['href']
-                info['account'] = href.replace("https://music.apple.com/us/artist/", "/")
+                info['account'] = href.replace("https://music.apple.com/us/artist/", "").split("/")[0]
+                info['account_id'] = href.replace("https://music.apple.com/us/artist/", "").split("/")[1]
                 
         elif platform == 'TikTok':
             parts = url.split('/')
@@ -300,7 +303,8 @@ def extract_info(html, platform, url):
                 # Handle case where the target URL is not found
                 if target_url:
                     print(f"Extracted URL: {target_url}")
-                    info['account'] = target_url.replace("https://music.amazon.com/artists/", "")
+                    info['account'] = target_url.replace("https://music.amazon.com/artists/", "").split("/")[1]
+                    info['account_id'] = target_url.replace("https://music.amazon.com/artists/", "").split("/")[0]
                 else:
                     print("No <script> element contained the desired URL after 20 seconds.")
 
