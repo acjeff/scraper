@@ -462,8 +462,8 @@ def process_chunk_file(chunk_file, output_dir="processed_chunks"):
         header = reader.fieldnames
         rows = list(reader)
     
-    # Process URLs in parallel within the chunk (reduced for server resources)
-    batch_size = 5  # Process 5 URLs at a time
+    # Process URLs two at a time (balanced for speed and stability)
+    batch_size = 2  # Process 2 URLs at a time
     batches = []
     
     for i in range(0, len(rows), batch_size):
@@ -472,7 +472,7 @@ def process_chunk_file(chunk_file, output_dir="processed_chunks"):
     
     processed_rows = []
     
-    # Use ProcessPoolExecutor for parallel processing (reduced for server resources)
+    # Process batches with minimal parallel processing (2 workers for stability)
     with ProcessPoolExecutor(max_workers=2) as executor:
         future_to_batch = {executor.submit(process_url_batch, batch): batch for batch in batches}
         
@@ -532,7 +532,7 @@ def main():
     print("\nStep 2: Processing chunks in parallel...")
     processed_chunks = []
     
-    # Use ProcessPoolExecutor for chunk processing (reduced for server resources)
+    # Process chunks with minimal parallel processing (2 workers for stability)
     with ProcessPoolExecutor(max_workers=2) as executor:
         future_to_chunk = {executor.submit(process_chunk_file, chunk): chunk for chunk in chunks}
         
