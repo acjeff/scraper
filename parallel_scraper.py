@@ -51,8 +51,27 @@ def init_driver():
     chromedriver_path = os.path.join(chromedriver_dir, "chromedriver")
     print(f"ChromeDriver path: {chromedriver_path}")
     
-    # Don't set binary_location - let webdriver-manager handle Chrome detection
-    print("Chrome binary will be auto-detected by webdriver-manager")
+    # Try to find Chrome binary in common locations
+    chrome_bin = None
+    possible_chrome_paths = [
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+        "/nix/var/nix/profiles/default/bin/chromium",
+        "/nix/var/nix/profiles/default/bin/chromium-browser"
+    ]
+    
+    for path in possible_chrome_paths:
+        if os.path.exists(path):
+            chrome_bin = path
+            print(f"Found Chrome binary at: {chrome_bin}")
+            break
+    
+    if chrome_bin:
+        options.binary_location = chrome_bin
+        print(f"Using Chrome binary: {chrome_bin}")
+    else:
+        print("Chrome binary not found, trying system default")
 
     driver = webdriver.Chrome(service=Service(chromedriver_path), options=options)
     driver.set_page_load_timeout(120)
@@ -64,18 +83,31 @@ def init_driver():
 
 def check_url(url):
     """Check if URL is accessible and return HTML content"""
-    try:
-        driver = init_driver()
-        driver.get(url)
-        time.sleep(2)  # Brief wait for page load
-        html = driver.page_source
-        driver.quit()
-        return html
-    except Exception as e:
-        print(f"Error checking URL {url}: {e}")
-        if 'driver' in locals():
+    driver = None
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            driver = init_driver()
+            driver.get(url)
+            time.sleep(2)  # Brief wait for page load
+            html = driver.page_source
             driver.quit()
-        return None
+            return html
+        except Exception as e:
+            print(f"Error checking URL {url} (attempt {attempt + 1}/{max_retries}): {e}")
+            if driver:
+                try:
+                    driver.quit()
+                except:
+                    pass
+            if attempt < max_retries - 1:
+                time.sleep(2)  # Wait before retry
+            else:
+                print(f"Failed to process URL {url} after {max_retries} attempts")
+                return None
+    
+    return None
 
 def extract_info(html, platform, url):
     """Extract information from HTML content"""
