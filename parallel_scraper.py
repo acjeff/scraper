@@ -13,6 +13,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from urllib.parse import urlparse
 import requests
 import shutil
+import gc
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -91,17 +92,23 @@ def check_url(url):
             driver.get(url)
             time.sleep(2)  # Brief wait for page load
             html = driver.page_source
+            
+            # Explicitly close the driver
             driver.quit()
+            driver = None
+            
             return html
         except Exception as e:
             print(f"Error checking URL {url} (attempt {attempt + 1}/{max_retries}): {e}")
+            # Ensure driver is closed even on error
             if driver:
                 try:
                     driver.quit()
                 except:
                     pass
+                driver = None
             if attempt < max_retries - 1:
-                time.sleep(2)  # Wait before retry
+                time.sleep(3)  # Wait before retry
             else:
                 print(f"Failed to process URL {url} after {max_retries} attempts")
                 return None
@@ -375,8 +382,8 @@ def process_url_batch(batch_data):
                     if not row[key]:  # Only fill empty fields
                         row[key] = value
             
-                            # Add delay to avoid overwhelming servers (increased for server resources)
-                time.sleep(2)
+                            # Add delay to avoid overwhelming servers and allow memory cleanup
+                time.sleep(5)
             
             results.append(row)
             
@@ -462,8 +469,8 @@ def process_chunk_file(chunk_file, output_dir="processed_chunks"):
         header = reader.fieldnames
         rows = list(reader)
     
-    # Process URLs two at a time (balanced for speed and stability)
-    batch_size = 2  # Process 2 URLs at a time
+    # Process URLs one at a time (single-threaded for maximum stability)
+    batch_size = 1  # Process 1 URL at a time
     batches = []
     
     for i in range(0, len(rows), batch_size):
@@ -472,14 +479,15 @@ def process_chunk_file(chunk_file, output_dir="processed_chunks"):
     
     processed_rows = []
     
-    # Process batches with minimal parallel processing (2 workers for stability)
-    with ProcessPoolExecutor(max_workers=2) as executor:
-        future_to_batch = {executor.submit(process_url_batch, batch): batch for batch in batches}
+    # Process sequentially (no parallel processing for maximum stability)
+    for batch in batches:
+        batch_id, results = process_url_batch(batch)
+        processed_rows.extend(results)
+        print(f"Completed batch {batch_id} in chunk {chunk_id}")
         
-        for future in as_completed(future_to_batch):
-            batch_id, results = future.result()
-            processed_rows.extend(results)
-            print(f"Completed batch {batch_id} in chunk {chunk_id}")
+        # Force garbage collection after each batch to free memory
+        gc.collect()
+        time.sleep(1)  # Brief pause to allow memory cleanup
     
     # Save processed chunk
     with open(output_file, 'w', newline='', encoding='utf-8-sig') as f:
@@ -532,14 +540,11 @@ def main():
     print("\nStep 2: Processing chunks in parallel...")
     processed_chunks = []
     
-    # Process chunks with minimal parallel processing (2 workers for stability)
-    with ProcessPoolExecutor(max_workers=2) as executor:
-        future_to_chunk = {executor.submit(process_chunk_file, chunk): chunk for chunk in chunks}
-        
-        for future in as_completed(future_to_chunk):
-            processed_chunk = future.result()
-            processed_chunks.append(processed_chunk)
-            print(f"Completed processing chunk: {processed_chunk}")
+    # Process chunks sequentially (no parallel processing for maximum stability)
+    for chunk in chunks:
+        processed_chunk = process_chunk_file(chunk)
+        processed_chunks.append(processed_chunk)
+        print(f"Completed processing chunk: {processed_chunk}")
     
     # Step 3: Combine processed chunks
     print("\nStep 3: Combining processed chunks...")
