@@ -1,12 +1,8 @@
 [phases.setup]
 # Install system Chromium and Chromedriver via Nixpacks
-nixPkgs = ["chromium", "chromedriver", "python39", "python39Packages.pip"]
-
-[phases.install]
-cmds = ["python3 -m pip install --user -r requirements.txt"]
+nixPkgs = ["chromium", "chromedriver"]
 
 [variables]
 # Hint Selenium where to find Chrome/Chromedriver if needed
 CHROME_BIN = "chromium"
 CHROMEDRIVER_PATH = "chromedriver"
-PYTHON_VERSION = "3.9"
