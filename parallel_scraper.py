@@ -27,11 +27,7 @@ from bs4 import BeautifulSoup
 processed_count = 0
 total_count = 0
 
-# Set Railway environment variables if not already set
-if not os.environ.get("CHROME_BIN"):
-    os.environ["CHROME_BIN"] = "chromium"
-if not os.environ.get("CHROMEDRIVER_PATH"):
-    os.environ["CHROMEDRIVER_PATH"] = "chromedriver"
+# No need to set environment variables - webdriver-manager will handle everything
 
 def init_driver():
     """Initialize Chrome driver with anti-detection measures"""
@@ -46,34 +42,17 @@ def init_driver():
     options.add_argument("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36")
     options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
 
-    # Prefer system-installed Chromium/Chromedriver (Railway/Nixpacks) and fall back to webdriver_manager
-    chrome_bin = os.environ.get("CHROME_BIN") or shutil.which("chromium") or shutil.which("chromium-browser")
-    if chrome_bin:
-        options.binary_location = chrome_bin
-        print(f"Using Chrome binary: {chrome_bin}")
-
-    # Try multiple paths for chromedriver
-    chromedriver_path = None
-    possible_paths = [
-        os.environ.get("CHROMEDRIVER_PATH"),
-        shutil.which("chromedriver"),
-        "/usr/bin/chromedriver",
-        "/nix/var/nix/profiles/default/bin/chromedriver"
-    ]
+    # Use webdriver-manager to handle Chrome/ChromeDriver automatically
+    print("Using webdriver-manager for Chrome/ChromeDriver...")
     
-    for path in possible_paths:
-        if path and os.path.exists(path):
-            chromedriver_path = path
-            print(f"Found chromedriver at: {chromedriver_path}")
-            break
+    # Download and setup ChromeDriver
+    base_path = ChromeDriverManager().install()
+    chromedriver_dir = os.path.dirname(base_path)
+    chromedriver_path = os.path.join(chromedriver_dir, "chromedriver")
+    print(f"ChromeDriver path: {chromedriver_path}")
     
-    if not chromedriver_path:
-        print("ChromeDriver not found in system paths, downloading with webdriver_manager...")
-        # Fallback: download with webdriver_manager (useful locally)
-        base_path = ChromeDriverManager().install()
-        chromedriver_dir = os.path.dirname(base_path)
-        chromedriver_path = os.path.join(chromedriver_dir, "chromedriver")
-        print(f"Downloaded chromedriver to: {chromedriver_path}")
+    # Don't set binary_location - let webdriver-manager handle Chrome detection
+    print("Chrome binary will be auto-detected by webdriver-manager")
 
     driver = webdriver.Chrome(service=Service(chromedriver_path), options=options)
     driver.set_page_load_timeout(120)
