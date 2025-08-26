@@ -14,6 +14,11 @@ from urllib.parse import urlparse
 import requests
 import shutil
 import gc
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -29,6 +34,68 @@ processed_count = 0
 total_count = 0
 
 # No need to set environment variables - webdriver-manager will handle everything
+
+def send_email_with_csv(data, batch_number, email_to="labaia33@gmail.com"):
+    """Send processed data as CSV via email"""
+    try:
+        # Create CSV file
+        csv_filename = f"processed_batch_{batch_number}.csv"
+        with open(csv_filename, 'w', newline='', encoding='utf-8-sig') as f:
+            if data:
+                writer = csv.DictWriter(f, fieldnames=data[0].keys())
+                writer.writeheader()
+                writer.writerows(data)
+        
+        # Email setup (using Gmail SMTP)
+        sender_email = "your-email@gmail.com"  # You'll need to set this
+        sender_password = "your-app-password"   # You'll need to set this
+        
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = email_to
+        msg['Subject'] = f"Scraper Progress - Batch {batch_number} ({len(data)} rows)"
+        
+        body = f"""
+        Hi,
+        
+        Here's batch {batch_number} with {len(data)} processed URLs.
+        
+        Total progress: {batch_number * 1000} rows processed so far.
+        
+        Best regards,
+        Your Scraper
+        """
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Attach CSV file
+        with open(csv_filename, "rb") as attachment:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(attachment.read())
+        
+        encoders.encode_base64(part)
+        part.add_header(
+            'Content-Disposition',
+            f'attachment; filename= {csv_filename}'
+        )
+        msg.attach(part)
+        
+        # Send email
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        text = msg.as_string()
+        server.sendmail(sender_email, email_to, text)
+        server.quit()
+        
+        print(f"✅ Email sent with batch {batch_number} ({len(data)} rows)")
+        
+        # Clean up CSV file
+        os.remove(csv_filename)
+        
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
 
 def init_driver():
     """Initialize Chrome driver with anti-detection measures"""
@@ -527,17 +594,21 @@ def main():
     input_file = "TestLinks.csv"  # Use full file
     output_file = "UpdatedTestLinks.csv"
     chunk_size = 50  # Process 50 URLs per chunk (reduced for server resources)
+    email_batch_size = 1000  # Send email every 1000 rows
     
     print(f"Starting parallel processing of {input_file}")
     print(f"Chunk size: {chunk_size} URLs")
+    print(f"Email batch size: {email_batch_size} rows")
     
     # Step 1: Split CSV into chunks
     print("\nStep 1: Splitting CSV into chunks...")
     chunks = split_csv_into_chunks(input_file, chunk_size)
     print(f"Created {len(chunks)} chunks")
     
-    # Step 2: Process chunks in parallel
-    print("\nStep 2: Processing chunks in parallel...")
+    # Step 2: Process chunks and collect results
+    print("\nStep 2: Processing chunks and collecting results...")
+    all_processed_data = []
+    batch_number = 1
     processed_chunks = []
     
     # Process chunks sequentially (no parallel processing for maximum stability)
@@ -545,12 +616,37 @@ def main():
         processed_chunk = process_chunk_file(chunk)
         processed_chunks.append(processed_chunk)
         print(f"Completed processing chunk: {processed_chunk}")
+        
+        # Read the processed chunk and add to collection
+        with open(processed_chunk, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            chunk_data = list(reader)
+            all_processed_data.extend(chunk_data)
+        
+        # Check if we have enough data to send email
+        if len(all_processed_data) >= email_batch_size:
+            batch_data = all_processed_data[:email_batch_size]
+            send_email_with_csv(batch_data, batch_number)
+            
+            # Remove sent data from collection to free memory
+            all_processed_data = all_processed_data[email_batch_size:]
+            batch_number += 1
+            
+            # Force garbage collection
+            gc.collect()
+            print(f"📧 Sent batch {batch_number-1}, continuing with {len(all_processed_data)} remaining rows")
     
-    # Step 3: Combine processed chunks
-    print("\nStep 3: Combining processed chunks...")
+    # Send any remaining data
+    if all_processed_data:
+        send_email_with_csv(all_processed_data, batch_number)
+        print(f"📧 Sent final batch {batch_number} with {len(all_processed_data)} rows")
+    
+    # Step 3: Combine all processed chunks for final output
+    print("\nStep 3: Creating final combined output...")
     combine_processed_chunks(processed_chunks, output_file)
     
     print(f"\nProcessing complete! Results saved to: {output_file}")
+    print(f"📧 Total batches sent: {batch_number}")
 
 if __name__ == "__main__":
     main()
