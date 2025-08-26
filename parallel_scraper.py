@@ -37,41 +37,41 @@ def init_driver():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-web-security")
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-plugins")
+    options.add_argument("--disable-images")
+    options.add_argument("--disable-javascript")
+    options.add_argument("--memory-pressure-off")
+    options.add_argument("--max_old_space_size=512")
+    options.add_argument("--single-process")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)
-    options.add_argument("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36")
+    options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36")
     options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
 
-    # Use webdriver-manager to handle Chrome/ChromeDriver automatically
-    print("Using webdriver-manager for Chrome/ChromeDriver...")
+    # Use system-installed Chrome and ChromeDriver (installed via Nixpacks)
+    print("Using system Chrome and ChromeDriver...")
     
-    # Download and setup ChromeDriver
-    base_path = ChromeDriverManager().install()
-    chromedriver_dir = os.path.dirname(base_path)
-    chromedriver_path = os.path.join(chromedriver_dir, "chromedriver")
-    print(f"ChromeDriver path: {chromedriver_path}")
-    
-    # Try to find Chrome binary in common locations
-    chrome_bin = None
-    possible_chrome_paths = [
-        "/usr/bin/google-chrome",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/chromium",
-        "/nix/var/nix/profiles/default/bin/chromium",
-        "/nix/var/nix/profiles/default/bin/chromium-browser"
-    ]
-    
-    for path in possible_chrome_paths:
-        if os.path.exists(path):
-            chrome_bin = path
-            print(f"Found Chrome binary at: {chrome_bin}")
-            break
-    
-    if chrome_bin:
+    # Use system Chrome binary
+    chrome_bin = "/nix/var/nix/profiles/default/bin/chromium"
+    if os.path.exists(chrome_bin):
         options.binary_location = chrome_bin
         print(f"Using Chrome binary: {chrome_bin}")
     else:
-        print("Chrome binary not found, trying system default")
+        print("Chrome binary not found at expected location")
+    
+    # Use system ChromeDriver
+    chromedriver_path = "/nix/var/nix/profiles/default/bin/chromedriver"
+    if os.path.exists(chromedriver_path):
+        print(f"Using system ChromeDriver: {chromedriver_path}")
+    else:
+        print("System ChromeDriver not found, falling back to webdriver-manager")
+        # Fallback to webdriver-manager
+        base_path = ChromeDriverManager().install()
+        chromedriver_dir = os.path.dirname(base_path)
+        chromedriver_path = os.path.join(chromedriver_dir, "chromedriver")
+        print(f"Using webdriver-manager ChromeDriver: {chromedriver_path}")
 
     driver = webdriver.Chrome(service=Service(chromedriver_path), options=options)
     driver.set_page_load_timeout(120)
