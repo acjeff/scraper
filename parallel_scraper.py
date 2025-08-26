@@ -319,29 +319,43 @@ def process_url_batch(batch_data):
     
     for i, row in enumerate(urls):
         try:
-            if row['url']:
-                print(f"Batch {batch_id}: Processing {i+1}/{len(urls)} - {row['platform']}: {row['url']}")
+            # Validate row structure
+            if not isinstance(row, dict):
+                print(f"Batch {batch_id}: Invalid row format at index {i}")
+                results.append({})
+                continue
                 
-                # Get HTML content
-                html = check_url(row['url'])
+            if not row.get('url'):
+                print(f"Batch {batch_id}: No URL found at index {i}")
+                results.append(row)
+                continue
                 
-                # Extract information
-                info = extract_info(html, row['platform'], row['url'])
-                
-                # Update row with extracted info
-                for key, value in info.items():
-                    if key in row:
-                        if not row[key]:  # Only fill empty fields
-                            row[key] = value
-                
-                # Add delay to avoid overwhelming servers
-                time.sleep(1)
+            print(f"Batch {batch_id}: Processing {i+1}/{len(urls)} - {row.get('platform', 'Unknown')}: {row['url']}")
+            
+            # Get HTML content
+            html = check_url(row['url'])
+            
+            # Extract information
+            info = extract_info(html, row.get('platform', 'Unknown'), row['url'])
+            
+            # Update row with extracted info
+            for key, value in info.items():
+                if key in row:
+                    if not row[key]:  # Only fill empty fields
+                        row[key] = value
+            
+                            # Add delay to avoid overwhelming servers (increased for server resources)
+                time.sleep(2)
             
             results.append(row)
             
         except Exception as e:
-            print(f"Error processing URL in batch {batch_id}: {e}")
-            results.append(row)  # Add original row even if processing failed
+            print(f"Error processing URL in batch {batch_id} at index {i}: {e}")
+            # Add original row even if processing failed
+            if isinstance(row, dict):
+                results.append(row)
+            else:
+                results.append({})
     
     print(f"Completed batch {batch_id}")
     return batch_id, results
@@ -417,8 +431,8 @@ def process_chunk_file(chunk_file, output_dir="processed_chunks"):
         header = reader.fieldnames
         rows = list(reader)
     
-    # Process URLs in parallel within the chunk
-    batch_size = 10  # Process 10 URLs at a time
+    # Process URLs in parallel within the chunk (reduced for server resources)
+    batch_size = 5  # Process 5 URLs at a time
     batches = []
     
     for i in range(0, len(rows), batch_size):
@@ -427,8 +441,8 @@ def process_chunk_file(chunk_file, output_dir="processed_chunks"):
     
     processed_rows = []
     
-    # Use ProcessPoolExecutor for parallel processing
-    with ProcessPoolExecutor(max_workers=4) as executor:
+    # Use ProcessPoolExecutor for parallel processing (reduced for server resources)
+    with ProcessPoolExecutor(max_workers=2) as executor:
         future_to_batch = {executor.submit(process_url_batch, batch): batch for batch in batches}
         
         for future in as_completed(future_to_batch):
@@ -473,7 +487,7 @@ def combine_processed_chunks(processed_chunks, output_file):
 def main():
     input_file = "TestLinks.csv"  # Use full file
     output_file = "UpdatedTestLinks.csv"
-    chunk_size = 100  # Process 100 URLs per chunk
+    chunk_size = 50  # Process 50 URLs per chunk (reduced for server resources)
     
     print(f"Starting parallel processing of {input_file}")
     print(f"Chunk size: {chunk_size} URLs")
@@ -487,8 +501,8 @@ def main():
     print("\nStep 2: Processing chunks in parallel...")
     processed_chunks = []
     
-    # Use ProcessPoolExecutor for chunk processing
-    with ProcessPoolExecutor(max_workers=4) as executor:
+    # Use ProcessPoolExecutor for chunk processing (reduced for server resources)
+    with ProcessPoolExecutor(max_workers=2) as executor:
         future_to_chunk = {executor.submit(process_chunk_file, chunk): chunk for chunk in chunks}
         
         for future in as_completed(future_to_chunk):
