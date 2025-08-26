@@ -27,6 +27,12 @@ from bs4 import BeautifulSoup
 processed_count = 0
 total_count = 0
 
+# Set Railway environment variables if not already set
+if not os.environ.get("CHROME_BIN"):
+    os.environ["CHROME_BIN"] = "chromium"
+if not os.environ.get("CHROMEDRIVER_PATH"):
+    os.environ["CHROMEDRIVER_PATH"] = "chromedriver"
+
 def init_driver():
     """Initialize Chrome driver with anti-detection measures"""
     options = Options()
@@ -44,13 +50,30 @@ def init_driver():
     chrome_bin = os.environ.get("CHROME_BIN") or shutil.which("chromium") or shutil.which("chromium-browser")
     if chrome_bin:
         options.binary_location = chrome_bin
+        print(f"Using Chrome binary: {chrome_bin}")
 
-    chromedriver_path = os.environ.get("CHROMEDRIVER_PATH") or shutil.which("chromedriver")
+    # Try multiple paths for chromedriver
+    chromedriver_path = None
+    possible_paths = [
+        os.environ.get("CHROMEDRIVER_PATH"),
+        shutil.which("chromedriver"),
+        "/usr/bin/chromedriver",
+        "/nix/var/nix/profiles/default/bin/chromedriver"
+    ]
+    
+    for path in possible_paths:
+        if path and os.path.exists(path):
+            chromedriver_path = path
+            print(f"Found chromedriver at: {chromedriver_path}")
+            break
+    
     if not chromedriver_path:
+        print("ChromeDriver not found in system paths, downloading with webdriver_manager...")
         # Fallback: download with webdriver_manager (useful locally)
         base_path = ChromeDriverManager().install()
         chromedriver_dir = os.path.dirname(base_path)
         chromedriver_path = os.path.join(chromedriver_dir, "chromedriver")
+        print(f"Downloaded chromedriver to: {chromedriver_path}")
 
     driver = webdriver.Chrome(service=Service(chromedriver_path), options=options)
     driver.set_page_load_timeout(120)
