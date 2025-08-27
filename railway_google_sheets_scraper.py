@@ -188,7 +188,7 @@ class RailwayGoogleSheetsScraper:
         """Write headers to Google Sheets if not already written"""
         if not self.headers_written:
             headers = ['platform', 'url', 'account', 'account_id', 'media_title', 'media_length', 'processed_at']
-            self.output_sheet.update('A1:G1', [headers])
+            self.output_sheet.update(values=[headers], range_name='A1:G1')
             self.headers_written = True
             logging.info("📋 Headers written to output Google Sheet")
     
@@ -211,7 +211,7 @@ class RailwayGoogleSheetsScraper:
             
             # Insert row
             range_name = f'A{self.current_row}:G{self.current_row}'
-            self.output_sheet.update(range_name, [row_data])
+            self.output_sheet.update(values=[row_data], range_name=range_name)
             
             logging.info(f"✅ Row {self.current_row}: {data.get('platform', 'Unknown')} - {data.get('url', '')[:50]}...")
             
