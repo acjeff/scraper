@@ -2,6 +2,34 @@
 
 This system provides a much faster and more robust way to process your large TestLinks.csv file.
 
+## 🆕 **NEW: Super Memory Efficient Google Sheets Scraper**
+
+For the most memory-efficient solution, check out the new Google Sheets scraper:
+
+- **Zero local storage** - Data goes directly to Google Sheets
+- **Immediate memory clearing** - No memory buildup
+- **Easy tracking** - Resume from any row number
+- **Crash-proof** - Data saved after each link
+
+**Files:**
+- `memory_efficient_google_sheets_scraper.py` - Main scraper
+- `resume_google_sheets_scraper.py` - Resume functionality
+- `GOOGLE_SHEETS_SETUP.md` - Complete setup guide
+
+**Quick Start:**
+```bash
+# Install dependencies
+pip install -r requirements_google_sheets.txt
+
+# Set up Google credentials (see GOOGLE_SHEETS_SETUP.md)
+# Update SPREADSHEET_ID in the script
+
+# Run the scraper
+python3 memory_efficient_google_sheets_scraper.py
+```
+
+---
+
 ## 🚀 **Speed Improvements**
 
 ### **Original Sequential Processing:**

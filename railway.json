@@ -4,18 +4,14 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "python3 parallel_scraper.py",
+    "startCommand": "python3 railway_google_sheets_scraper.py",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5
   },
   "services": [
     {
-      "name": "scraper",
-      "startCommand": "python3 parallel_scraper.py"
-    },
-    {
-      "name": "resume",
-      "startCommand": "python3 resume_scraper.py"
+      "name": "google-sheets-scraper",
+      "startCommand": "python3 railway_google_sheets_scraper.py"
     }
   ]
 }
