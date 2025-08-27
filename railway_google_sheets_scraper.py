@@ -251,6 +251,10 @@ class RailwayGoogleSheetsScraper:
         options.add_argument("--disable-background-timer-throttling")
         options.add_argument("--disable-backgrounding-occluded-windows")
         options.add_argument("--disable-renderer-backgrounding")
+        options.add_argument("--remote-debugging-port=9222")
+        options.add_argument("--disable-setuid-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-software-rasterizer")
         
         # User agent for Railway
         options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36")
@@ -267,12 +271,17 @@ class RailwayGoogleSheetsScraper:
             options.binary_location = chrome_bin
             logging.info(f"Using Chrome binary: {chrome_bin}")
         
+        # Try system ChromeDriver first, then fallback to webdriver-manager
         if os.path.exists(chromedriver_path):
             logging.info(f"Using system ChromeDriver: {chromedriver_path}")
             service = Service(chromedriver_path)
         else:
             logging.info("System ChromeDriver not found, using webdriver-manager")
-            service = Service(ChromeDriverManager().install())
+            # Use webdriver-manager with specific options for Railway
+            from webdriver_manager.chrome import ChromeDriverManager
+            driver_path = ChromeDriverManager().install()
+            service = Service(driver_path)
+            logging.info(f"Using webdriver-manager ChromeDriver: {driver_path}")
 
         self.driver = webdriver.Chrome(service=service, options=options)
         self.driver.set_page_load_timeout(30)  # Shorter timeout for Railway
@@ -293,7 +302,7 @@ class RailwayGoogleSheetsScraper:
                     self._init_driver()
                 
                 self.driver.get(url)
-                time.sleep(0.5)  # Minimal wait time for Railway
+                time.sleep(1)  # Slightly longer wait time for Railway
                 html = self.driver.page_source
                 
                 return html
@@ -310,7 +319,7 @@ class RailwayGoogleSheetsScraper:
                     self.driver = None
                 
                 if attempt < max_retries - 1:
-                    time.sleep(2)  # Wait before retry
+                    time.sleep(3)  # Longer wait before retry
                 else:
                     logging.error(f"Failed to process URL {url} after {max_retries} attempts")
                     return None
