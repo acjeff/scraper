@@ -233,82 +233,144 @@ class RailwayGoogleSheetsScraper:
                 pass
             self.driver = None
         
-        options = Options()
+        # Try to use a simpler approach first - just use requests for most platforms
+        # Only use Selenium for platforms that absolutely need JavaScript
+        platform = self._get_platform_from_url(self.current_url) if hasattr(self, 'current_url') else None
         
-        # Railway-optimized Chrome options (memory efficient)
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--disable-web-security")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("--disable-extensions")
-        options.add_argument("--disable-plugins")
-        options.add_argument("--disable-images")  # Save memory
-        options.add_argument("--memory-pressure-off")
-        options.add_argument("--max_old_space_size=512")  # Limit memory usage
-        options.add_argument("--single-process")  # Use single process
-        options.add_argument("--disable-background-timer-throttling")
-        options.add_argument("--disable-backgrounding-occluded-windows")
-        options.add_argument("--disable-renderer-backgrounding")
-        options.add_argument("--remote-debugging-port=9222")
-        options.add_argument("--disable-setuid-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-software-rasterizer")
-        
-        # User agent for Railway
-        options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36")
-        
-        # Anti-detection
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
-        
-        # Use system Chrome/Chromedriver on Railway (installed via Nixpacks)
-        chrome_bin = os.getenv('CHROME_BIN', 'chromium')
-        chromedriver_path = os.getenv('CHROMEDRIVER_PATH', 'chromedriver')
-        
-        if os.path.exists(chrome_bin):
-            options.binary_location = chrome_bin
-            logging.info(f"Using Chrome binary: {chrome_bin}")
-        
-        # Try system ChromeDriver first, then fallback to webdriver-manager
-        if os.path.exists(chromedriver_path):
-            logging.info(f"Using system ChromeDriver: {chromedriver_path}")
-            service = Service(chromedriver_path)
+        if platform in ['YouTube', 'TikTok']:
+            # These platforms need JavaScript, so try Selenium
+            return self._init_selenium_driver()
         else:
-            logging.info("System ChromeDriver not found, using webdriver-manager")
-            # Use webdriver-manager with specific options for Railway
-            from webdriver_manager.chrome import ChromeDriverManager
-            driver_path = ChromeDriverManager().install()
-            service = Service(driver_path)
-            logging.info(f"Using webdriver-manager ChromeDriver: {driver_path}")
+            # For other platforms, we'll use requests fallback
+            logging.info(f"Using requests fallback for {platform} - no Selenium needed")
+            return None
+    
+    def _get_platform_from_url(self, url):
+        """Extract platform from URL"""
+        if 'youtube.com' in url or 'youtu.be' in url:
+            return 'YouTube'
+        elif 'tiktok.com' in url:
+            return 'TikTok'
+        elif 'soundcloud.com' in url:
+            return 'Soundcloud'
+        elif 'dailymotion.com' in url:
+            return 'Daily Motion'
+        else:
+            return 'Unknown'
+    
+    def _init_selenium_driver(self):
+        """Initialize Selenium driver for platforms that need JavaScript"""
+        try:
+            options = Options()
+            
+            # Railway-optimized Chrome options (memory efficient)
+            options.add_argument("--headless")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--disable-web-security")
+            options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_argument("--disable-extensions")
+            options.add_argument("--disable-plugins")
+            options.add_argument("--disable-images")  # Save memory
+            options.add_argument("--memory-pressure-off")
+            options.add_argument("--max_old_space_size=512")  # Limit memory usage
+            options.add_argument("--single-process")  # Use single process
+            options.add_argument("--disable-background-timer-throttling")
+            options.add_argument("--disable-backgrounding-occluded-windows")
+            options.add_argument("--disable-renderer-backgrounding")
+            options.add_argument("--remote-debugging-port=9222")
+            options.add_argument("--disable-setuid-sandbox")
+            options.add_argument("--disable-software-rasterizer")
+            
+            # User agent for Railway
+            options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36")
+            
+            # Anti-detection
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option('useAutomationExtension', False)
+            
+            # Use system Chrome/Chromedriver on Railway (installed via Nixpacks)
+            chrome_bin = os.getenv('CHROME_BIN', 'chromium')
+            chromedriver_path = os.getenv('CHROMEDRIVER_PATH', 'chromedriver')
+            
+            if os.path.exists(chrome_bin):
+                options.binary_location = chrome_bin
+                logging.info(f"Using Chrome binary: {chrome_bin}")
+            
+            # Try system ChromeDriver first, then fallback to webdriver-manager
+            if os.path.exists(chromedriver_path):
+                logging.info(f"Using system ChromeDriver: {chromedriver_path}")
+                service = Service(chromedriver_path)
+            else:
+                logging.info("System ChromeDriver not found, using webdriver-manager")
+                # Use webdriver-manager with specific options for Railway
+                from webdriver_manager.chrome import ChromeDriverManager
+                import subprocess
+                import stat
+                
+                driver_path = ChromeDriverManager().install()
+                
+                # Make sure the ChromeDriver is executable
+                try:
+                    os.chmod(driver_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                    logging.info(f"Made ChromeDriver executable: {driver_path}")
+                except Exception as e:
+                    logging.warning(f"Could not make ChromeDriver executable: {e}")
+                
+                service = Service(driver_path)
+                logging.info(f"Using webdriver-manager ChromeDriver: {driver_path}")
 
-        self.driver = webdriver.Chrome(service=service, options=options)
-        self.driver.set_page_load_timeout(30)  # Shorter timeout for Railway
-        self.driver.set_script_timeout(15)
-        
-        # Remove webdriver property
-        self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        
-        return self.driver
+            self.driver = webdriver.Chrome(service=service, options=options)
+            self.driver.set_page_load_timeout(30)  # Shorter timeout for Railway
+            self.driver.set_script_timeout(15)
+            
+            # Remove webdriver property
+            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            return self.driver
+            
+        except Exception as e:
+            logging.error(f"Failed to initialize Selenium driver: {e}")
+            return None
     
     def _check_url(self, url):
         """Check if URL is accessible and return HTML content"""
-        max_retries = 3
+        # Set current URL for platform detection
+        self.current_url = url
+        
+        # Determine platform and choose method
+        platform = self._get_platform_from_url(url)
+        
+        if platform in ['YouTube', 'TikTok']:
+            # These platforms need JavaScript, try Selenium first
+            return self._check_url_selenium(url)
+        else:
+            # For other platforms, use requests directly (more reliable)
+            logging.info(f"Using requests method for {platform}")
+            return self._check_url_fallback(url)
+    
+    def _check_url_selenium(self, url):
+        """Check URL using Selenium (for platforms that need JavaScript)"""
+        max_retries = 2  # Fewer retries for Selenium since it's unreliable
         
         for attempt in range(max_retries):
             try:
                 if not self.driver:
                     self._init_driver()
                 
+                if not self.driver:  # If Selenium failed to initialize
+                    logging.info(f"Selenium failed, using requests fallback for {url}")
+                    return self._check_url_fallback(url)
+                
                 self.driver.get(url)
-                time.sleep(1)  # Slightly longer wait time for Railway
+                time.sleep(2)  # Wait for page load
                 html = self.driver.page_source
                 
                 return html
                 
             except Exception as e:
-                logging.error(f"Error checking URL {url} (attempt {attempt + 1}/{max_retries}): {e}")
+                logging.error(f"Selenium error for {url} (attempt {attempt + 1}/{max_retries}): {e}")
                 
                 # Reset driver on error
                 if self.driver:
@@ -319,22 +381,50 @@ class RailwayGoogleSheetsScraper:
                     self.driver = None
                 
                 if attempt < max_retries - 1:
-                    time.sleep(3)  # Longer wait before retry
+                    time.sleep(3)  # Wait before retry
                 else:
-                    logging.error(f"Failed to process URL {url} after {max_retries} attempts")
-                    return None
+                    logging.info(f"Selenium failed, using requests fallback for {url}")
+                    return self._check_url_fallback(url)
         
         return None
+    
+    def _check_url_fallback(self, url):
+        """Fallback method using requests instead of Selenium"""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+            
+            response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+            if response.status_code == 200:
+                logging.info(f"Fallback method successful for {url}")
+                return response.text
+            else:
+                logging.warning(f"Fallback method failed with status {response.status_code} for {url}")
+                return None
+                
+        except Exception as e:
+            logging.error(f"Fallback method error for {url}: {e}")
+            return None
     
     def _extract_info(self, html, platform, url):
         """Extract information from HTML content"""
         info = {'account': '', 'account_id': '', 'media_title': '', 'media_length': ''}
         
         if not html:
+            logging.warning(f"No HTML content for {url}")
             return info
         
         try:
             soup = BeautifulSoup(html, 'html.parser')
+            
+            # Log what we're trying to extract
+            logging.info(f"Extracting data for {platform} from {url}")
             
             if platform == 'YouTube':
                 # YouTube extraction logic
@@ -605,10 +695,19 @@ class RailwayGoogleSheetsScraper:
             info = self._extract_info(html, platform, url)
             
             # Update row with extracted info
+            extracted_data = {}
             for key, value in info.items():
                 if key in row:
                     if not row[key]:  # Only fill empty fields
                         row[key] = value
+                        if value:  # Only log non-empty values
+                            extracted_data[key] = value
+            
+            # Log extracted data
+            if extracted_data:
+                logging.info(f"✅ Extracted data: {extracted_data}")
+            else:
+                logging.warning(f"⚠️ No data extracted for {url}")
             
             # Insert into Google Sheets
             success = self._insert_row(row)
