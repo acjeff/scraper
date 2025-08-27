@@ -209,11 +209,27 @@ class RailwayGoogleSheetsScraper:
                 time.strftime('%Y-%m-%d %H:%M:%S')
             ]
             
+            # Log what we're trying to insert
+            logging.info(f"📝 Attempting to insert row {self.current_row} with data: {row_data}")
+            
             # Insert row
             range_name = f'A{self.current_row}:G{self.current_row}'
+            logging.info(f"📝 Inserting into range: {range_name}")
+            
             self.output_sheet.update(values=[row_data], range_name=range_name)
             
-            logging.info(f"✅ Row {self.current_row}: {data.get('platform', 'Unknown')} - {data.get('url', '')[:50]}...")
+            # Verify the insertion worked by checking the sheet
+            try:
+                # Get the row we just inserted to verify
+                inserted_row = self.output_sheet.row_values(self.current_row)
+                if inserted_row:
+                    logging.info(f"✅ Row {self.current_row}: {data.get('platform', 'Unknown')} - {data.get('url', '')[:50]}...")
+                    logging.info(f"✅ Verified insertion: {inserted_row}")
+                else:
+                    logging.warning(f"⚠️ Row {self.current_row} appears empty after insertion")
+            except Exception as verify_error:
+                logging.warning(f"⚠️ Could not verify insertion: {verify_error}")
+                logging.info(f"✅ Row {self.current_row}: {data.get('platform', 'Unknown')} - {data.get('url', '')[:50]}...")
             
             # Increment row counter
             self.current_row += 1
@@ -222,6 +238,7 @@ class RailwayGoogleSheetsScraper:
             
         except Exception as e:
             logging.error(f"❌ Error inserting row {self.current_row}: {e}")
+            logging.error(f"❌ Row data that failed: {row_data if 'row_data' in locals() else 'Not available'}")
             return False
     
     def _init_driver(self):
@@ -776,8 +793,8 @@ class RailwayGoogleSheetsScraper:
                 if self.process_single_url(row):
                     success_count += 1
                 
-                # Add delay to avoid overwhelming servers (shorter for Railway)
-                time.sleep(3)
+                # Add delay to avoid overwhelming servers and Google Sheets API
+                time.sleep(5)  # Increased delay to avoid rate limiting
                 
                 # Periodic status update
                 if processed_count % 10 == 0:
