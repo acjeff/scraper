@@ -91,13 +91,17 @@ def extract_artist_name(title):
 def has_focused_class(tag):
     return tag.name == 'music-text-row' and 'focused' in tag.get('class', [])
 
-def extract_info(html, platform, url):
+def extract_info(html, platform, url, driver=None):
     if html:
         soup = BeautifulSoup(html, 'html.parser')
     info = {'account': '', 'account_id': '', 'media_title': '', 'media_length': ''}
 
     try:
         if platform == 'YouTube':
+            if not driver:
+                print("Error: Driver is required for YouTube extraction")
+                return info
+                
             try:    
                 # Wait for the page to load
                 WebDriverWait(driver, 20).until(
@@ -109,12 +113,16 @@ def extract_info(html, platform, url):
                     title_element = driver.find_element(By.CSS_SELECTOR, 'meta[property="og:title"]')
                     if title_element:
                         info['media_title'] = title_element.get_attribute('content')
-                except:
+                        print(f"Extracted title from og:title: {info['media_title']}")
+                except Exception as e:
+                    print(f"Failed to extract title from og:title: {e}")
                     try:
                         title_element = driver.find_element(By.CSS_SELECTOR, 'h1.ytd-video-primary-info-renderer')
                         if title_element:
                             info['media_title'] = title_element.text
-                    except:
+                            print(f"Extracted title from h1: {info['media_title']}")
+                    except Exception as e2:
+                        print(f"Failed to extract title from h1: {e2}")
                         pass
                 
                 # Extract media length
@@ -122,12 +130,15 @@ def extract_info(html, platform, url):
                     length_element = driver.find_element(By.CSS_SELECTOR, 'span.ytp-time-duration')
                     if length_element:
                         info['media_length'] = length_element.text
-                except:
+                        print(f"Extracted length from span: {info['media_length']}")
+                except Exception as e:
+                    print(f"Failed to extract length from span: {e}")
                     try:
                         # Alternative method for length
                         length_element = driver.find_element(By.CSS_SELECTOR, 'meta[itemprop="duration"]')
                         if length_element:
                             duration = length_element.get_attribute('content')
+                            print(f"Extracted duration from meta: {duration}")
                             # Convert ISO 8601 duration to readable format
                             if duration.startswith('PT'):
                                 duration = duration[2:]
@@ -148,7 +159,9 @@ def extract_info(html, platform, url):
                                     info['media_length'] = f"{hours}:{minutes:02d}:{seconds:02d}"
                                 else:
                                     info['media_length'] = f"{minutes}:{seconds:02d}"
-                    except:
+                                print(f"Converted duration to: {info['media_length']}")
+                    except Exception as e2:
+                        print(f"Failed to extract length from meta: {e2}")
                         pass
 
                 # Get the current URL
@@ -180,37 +193,74 @@ def extract_info(html, platform, url):
                 if "youtube.com/channel/" in redirected_url:
                     channel_id = redirected_url.split("/channel/")[-1].split("/")[0]
                     print(f"Extracted Channel ID from URL: {channel_id}")
+                    # Try to get channel name from page title or other elements
+                    try:
+                        channel_name_element = driver.find_element(By.CSS_SELECTOR, 'meta[property="og:site_name"]')
+                        if channel_name_element:
+                            info['account'] = channel_name_element.get_attribute('content')
+                        else:
+                            info['account'] = "YouTube Channel"
+                    except:
+                        info['account'] = "YouTube Channel"
                 else:
                     print("URL does not point directly to a channel. Proceeding to extract from page metadata...")
 
-                    # Wait for the <span> with itemprop="author" to be present
-                    author_span = WebDriverWait(driver, 20).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "span[itemprop='author']"))
-                    )
+                    try:
+                        # Wait for the <span> with itemprop="author" to be present
+                        author_span = WebDriverWait(driver, 20).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, "span[itemprop='author']"))
+                        )
 
-                    # Find the <link> elements inside the <span>
-                    url_link = author_span.find_element(By.CSS_SELECTOR, "link[itemprop='url']")
-                    name_link = author_span.find_element(By.CSS_SELECTOR, "link[itemprop='name']")
+                        # Find the <link> elements inside the <span>
+                        url_link = author_span.find_element(By.CSS_SELECTOR, "link[itemprop='url']")
+                        name_link = author_span.find_element(By.CSS_SELECTOR, "link[itemprop='name']")
 
-                    # Extract the channel ID from the href attribute of the URL link
-                    channel_url = url_link.get_attribute("href")
-                    channel_id = channel_url.split("/")[-1]  # Extract the last part of the URL
-                    print(f"Extracted Channel ID: {channel_id}")
+                        # Extract the channel ID from the href attribute of the URL link
+                        channel_url = url_link.get_attribute("href")
+                        channel_id = channel_url.split("/")[-1]  # Extract the last part of the URL
+                        print(f"Extracted Channel ID: {channel_id}")
 
-                    # Extract the channel name from the content attribute of the name link
-                    channel_name = name_link.get_attribute("content")
-                    print(f"Extracted Channel Name: {channel_name}")
+                        # Extract the channel name from the content attribute of the name link
+                        channel_name = name_link.get_attribute("content")
+                        print(f"Extracted Channel Name: {channel_name}")
 
-                # Set info['account'] to the name and ID separated by a space
-                info['account'] = channel_name
-                info['account_id'] = channel_id
-                print(f"Set info['account']: {info['account']}")
+                        # Set info['account'] to the name and ID separated by a space
+                        info['account'] = channel_name
+                        info['account_id'] = channel_id
+                        print(f"Set info['account']: {info['account']}")
+                    except Exception as e:
+                        print(f"Failed to extract channel info from metadata: {e}")
+                        # Fallback: try to extract from video page
+                        try:
+                            # For video pages, try to get channel info from video metadata
+                            channel_link = driver.find_element(By.CSS_SELECTOR, 'a[href*="/channel/"]')
+                            if channel_link:
+                                channel_url = channel_link.get_attribute('href')
+                                channel_id = channel_url.split("/channel/")[-1].split("/")[0]
+                                info['account_id'] = channel_id
+                                
+                                # Try to get channel name from the link text
+                                channel_name = channel_link.text.strip()
+                                if channel_name:
+                                    info['account'] = channel_name
+                                else:
+                                    info['account'] = f"YouTube Channel {channel_id}"
+                                print(f"Fallback extraction - Channel: {info['account']}, ID: {info['account_id']}")
+                        except Exception as e2:
+                            print(f"Fallback extraction also failed: {e2}")
+                            info['account'] = "Unknown YouTube Channel"
+                            info['account_id'] = "unknown"
 
             except Exception as e:
-                print(f"An error occurred: {e}")
+                print(f"An error occurred during YouTube extraction: {e}")
+                import traceback
+                traceback.print_exc()
             
         elif platform == 'Spotify':
             if 'track' in url or 'artist' in url:
+                return info
+            if not driver:
+                print("Error: Driver is required for Spotify extraction")
                 return info
             try:
                 # Wait for the <meta> element containing the Spotify artist URL
@@ -383,6 +433,9 @@ def extract_info(html, platform, url):
                     pass
                 
         elif platform == 'Facebook':
+            if not driver:
+                print("Error: Driver is required for Facebook extraction")
+                return info
             try:
                 # Wait for all <a> elements to be present on the page
                 WebDriverWait(driver, 20).until(
@@ -426,6 +479,9 @@ def extract_info(html, platform, url):
                     pass
 
         elif platform == 'Daily Motion':
+            if not driver:
+                print("Error: Driver is required for Daily Motion extraction")
+                return info
             # Try Daily Motion's oEmbed API first (most reliable)
             try:
                 import requests
@@ -927,9 +983,9 @@ def process_csv(input_file, output_file):
                     if not noWebNeeded:  # If web interaction is needed
                         html = check_url(row['url'])
                         if html:
-                            info = extract_info(html, row['platform'], row['url'])
+                            info = extract_info(html, row['platform'], row['url'], driver)
                     else:  # If no web interaction is needed
-                        info = extract_info(None, row['platform'], row['url'])
+                        info = extract_info(None, row['platform'], row['url'], driver)
                         
                     for key, value in info.items():
                             if not row[key]:  # Only fill empty fields
