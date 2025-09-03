@@ -444,12 +444,13 @@ class RailwayGoogleSheetsScraper:
             logging.info(f"Extracting data for {platform} from {url}")
             
             if platform == 'YouTube':
-                # YouTube extraction logic
+                # Enhanced YouTube extraction logic
                 try:
                     # Extract title from meta tags
                     title_element = soup.find('meta', property='og:title')
                     if title_element:
                         info['media_title'] = title_element.get('content', '')
+                        logging.info(f"Extracted YouTube title: {info['media_title']}")
                     
                     # Extract duration from meta tags
                     duration_found = False
@@ -479,6 +480,7 @@ class RailwayGoogleSheetsScraper:
                             else:
                                 info['media_length'] = f"{minutes}:{seconds:02d}"
                             duration_found = True
+                            logging.info(f"Extracted YouTube duration: {info['media_length']}")
                     
                     # Method 2: Try meta[property="video:duration"]
                     if not duration_found:
@@ -501,27 +503,156 @@ class RailwayGoogleSheetsScraper:
                                     info['media_length'] = f"{hours}:{minutes:02d}:{seconds:02d}"
                                 else:
                                     info['media_length'] = f"{minutes}:{seconds:02d}"
+                            logging.info(f"Extracted YouTube duration (method 2): {info['media_length']}")
                     
-                    # Extract account info from meta tags
-                    channel_element = soup.find('meta', attrs={'name': 'author'})
-                    if channel_element:
-                        info['account'] = channel_element.get('content', '')
+                    # Enhanced account extraction from HTML content
+                    # Method 1: Try to find embedded JSON data with channel info
+                    try:
+                        import re
+                        import json
+                        
+                        # Look for embedded JSON data that contains channel information
+                        json_patterns = [
+                            r'var ytInitialData = ({.*?});',
+                            r'window\["ytInitialData"\] = ({.*?});',
+                            r'ytInitialData = ({.*?});',
+                            r'"channelId":"([^"]*)"',
+                            r'"author":"([^"]*)"',
+                            r'"authorText":\{"runs":\[\{"text":"([^"]*)"\}',
+                            r'"channelName":"([^"]*)"'
+                        ]
+                        
+                        # Try to extract from embedded JSON first
+                        for pattern in json_patterns:
+                            matches = re.findall(pattern, html, re.DOTALL)
+                            if matches:
+                                if pattern.startswith('"channelId"'):
+                                    info['account_id'] = matches[0]
+                                    logging.info(f"Extracted YouTube channel ID from JSON: {info['account_id']}")
+                                    break
+                                elif pattern.startswith('"author"') or pattern.startswith('"authorText"') or pattern.startswith('"channelName"'):
+                                    info['account'] = matches[0]
+                                    logging.info(f"Extracted YouTube channel name from JSON: {info['account']}")
+                                    break
+                                else:
+                                    # Try to parse the full JSON object
+                                    try:
+                                        json_data = json.loads(matches[0])
+                                        # Navigate through the JSON to find channel info
+                                        if 'contents' in json_data:
+                                            # Look for video details
+                                            video_details = json_data.get('contents', {}).get('twoColumnWatchNextResults', {}).get('results', {}).get('results', {}).get('contents', [])
+                                            for content in video_details:
+                                                if 'videoPrimaryInfoRenderer' in content:
+                                                    video_info = content['videoPrimaryInfoRenderer']
+                                                    if 'owner' in video_info:
+                                                        owner = video_info['owner']
+                                                        if 'videoOwnerRenderer' in owner:
+                                                            owner_renderer = owner['videoOwnerRenderer']
+                                                            if 'title' in owner_renderer:
+                                                                info['account'] = owner_renderer['title'].get('runs', [{}])[0].get('text', '')
+                                                                logging.info(f"Extracted YouTube channel name from JSON: {info['account']}")
+                                                            if 'navigationEndpoint' in owner_renderer:
+                                                                nav_endpoint = owner_renderer['navigationEndpoint']
+                                                                if 'commandMetadata' in nav_endpoint:
+                                                                    command_meta = nav_endpoint['commandMetadata']
+                                                                    if 'webCommandMetadata' in command_meta:
+                                                                        web_cmd = command_meta['webCommandMetadata']
+                                                                        if 'url' in web_cmd:
+                                                                            url = web_cmd['url']
+                                                                            if '/channel/' in url:
+                                                                                channel_id = url.split('/channel/')[-1].split('/')[0]
+                                                                                info['account_id'] = channel_id
+                                                                                logging.info(f"Extracted YouTube channel ID from JSON: {info['account_id']}")
+                                                                            elif '/@' in url:
+                                                                                channel_id = url.split('/@')[-1].split('/')[0]
+                                                                                info['account_id'] = f"@{channel_id}"
+                                                                                logging.info(f"Extracted YouTube channel ID from JSON: @{channel_id}")
+                                                            break
+                                    except json.JSONDecodeError:
+                                        continue
+                    except Exception as e:
+                        logging.warning(f"JSON extraction failed: {e}")
                     
-                    # Try to extract channel ID from various meta tags
-                    channel_id_selectors = [
-                        ('meta', {'name': 'channelId'}),
-                        ('meta', {'property': 'og:video:channel'}),
-                        ('meta', {'itemprop': 'channelId'})
-                    ]
+                    # Method 2: Try to find channel link in the HTML
+                    if not info['account_id']:
+                        try:
+                            # Look for channel links in the HTML content
+                            channel_patterns = [
+                                r'href="([^"]*youtube\.com/channel/[^"]*)"',
+                                r'href="([^"]*youtube\.com/c/[^"]*)"',
+                                r'href="([^"]*youtube\.com/@[^"]*)"',
+                                r'data-channel-id="([^"]*)"',
+                                r'data-yt-channel-id="([^"]*)"'
+                            ]
+                            
+                            for pattern in channel_patterns:
+                                matches = re.findall(pattern, html)
+                                if matches:
+                                    channel_url = matches[0]
+                                    if '/channel/' in channel_url:
+                                        channel_id = channel_url.split('/channel/')[-1].split('/')[0]
+                                        info['account_id'] = channel_id
+                                        logging.info(f"Extracted YouTube channel ID from HTML: {channel_id}")
+                                        break
+                                    elif '/@' in channel_url:
+                                        channel_id = channel_url.split('/@')[-1].split('/')[0]
+                                        info['account_id'] = f"@{channel_id}"
+                                        logging.info(f"Extracted YouTube channel ID from HTML: @{channel_id}")
+                                        break
+                        except Exception as e:
+                            logging.warning(f"Channel ID extraction from HTML failed: {e}")
                     
-                    for tag, attrs in channel_id_selectors:
-                        element = soup.find(tag, attrs)
-                        if element and element.get('content'):
-                            info['account_id'] = element.get('content')
-                            break
+                    # Method 2: Try to find channel name in the HTML
+                    try:
+                        # Look for channel name patterns in the HTML
+                        channel_name_patterns = [
+                            r'<meta[^>]*name="author"[^>]*content="([^"]*)"',
+                            r'<meta[^>]*property="og:video:channel"[^>]*content="([^"]*)"',
+                            r'<meta[^>]*itemprop="author"[^>]*content="([^"]*)"',
+                            r'data-channel-name="([^"]*)"',
+                            r'data-yt-channel-name="([^"]*)"'
+                        ]
+                        
+                        for pattern in channel_name_patterns:
+                            matches = re.findall(pattern, html)
+                            if matches:
+                                channel_name = matches[0].strip()
+                                if channel_name and channel_name != 'YouTube':
+                                    info['account'] = channel_name
+                                    logging.info(f"Extracted YouTube channel name from HTML: {channel_name}")
+                                    break
+                    except Exception as e:
+                        logging.warning(f"Channel name extraction from HTML failed: {e}")
+                    
+                    # Method 3: Fallback to meta tags (original method)
+                    if not info['account']:
+                        channel_element = soup.find('meta', attrs={'name': 'author'})
+                        if channel_element:
+                            info['account'] = channel_element.get('content', '')
+                            logging.info(f"Extracted YouTube channel name from meta: {info['account']}")
+                    
+                    if not info['account_id']:
+                        # Try to extract channel ID from various meta tags
+                        channel_id_selectors = [
+                            ('meta', {'name': 'channelId'}),
+                            ('meta', {'property': 'og:video:channel'}),
+                            ('meta', {'itemprop': 'channelId'})
+                        ]
+                        
+                        for tag, attrs in channel_id_selectors:
+                            element = soup.find(tag, attrs)
+                            if element and element.get('content'):
+                                info['account_id'] = element.get('content')
+                                logging.info(f"Extracted YouTube channel ID from meta: {info['account_id']}")
+                                break
+                    
+                    logging.info(f"YouTube extraction complete: account='{info['account']}', account_id='{info['account_id']}', title='{info['media_title']}', duration='{info['media_length']}'")
                     
                 except Exception as e:
                     logging.error(f"Error extracting YouTube info: {e}")
+                    import traceback
+                    logging.error(f"Traceback: {traceback.format_exc()}")
             
             elif platform == 'TikTok':
                 # TikTok extraction logic
